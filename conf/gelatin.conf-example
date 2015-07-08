@@ -1,0 +1,6 @@
+#This file has the connection information for a postgresql database
+
+#This is a username and password
+[postgresql]
+dbusername = username
+dbpass = pass

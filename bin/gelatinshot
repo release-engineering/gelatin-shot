@@ -10,7 +10,6 @@ from sqlalchemy.schema import MetaData, Table
 from sqlalchemy.sql.functions import current_timestamp
 
 from ConfigParser import SafeConfigParser
-
 import simplejson as json
 
 
@@ -47,8 +46,11 @@ class SHA256(Base):
     def __repr__(self):
         return "<SHA256(keyid='%s', checksum='%s', user='%s', date='%s')>" % (self.keyid, self.checksum, self.user, self.date)
 
+
+
+
 parser = SafeConfigParser()
-parser.read(os.path.join(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')), 'conf', 'gelatin.conf'))
+parser.read('/etc/gelatin-shot/gelatin.conf')
 
 dbUsername = parser.get("postgresql", "dbusername")
 dbPassword = parser.get("postgresql", "dbpass")

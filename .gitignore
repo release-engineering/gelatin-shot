@@ -1,3 +1,4 @@
 build/
 dist/
 gelatin_shot.egg-info/
+conf/gelatin.conf

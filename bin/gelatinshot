@@ -4,17 +4,18 @@ from flask import Flask, url_for, request, jsonify
 #from flask_kerberos import requires_authentication, init_kerberos
 from sqlalchemy import create_engine, update
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import Column, String, Integer, DateTime, Sequence
+from sqlalchemy import Column, String, Integer, DateTime, Sequence, Boolean, UniqueConstraint
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.schema import MetaData, Table
+from sqlalchemy.schema import MetaData, Table, ForeignKeyConstraint
 from sqlalchemy.sql.functions import current_timestamp
 
 from ConfigParser import SafeConfigParser
 import simplejson as json
 
+class Base(object):
+    __table_args__ = {'mysql_engine': 'InnoDB'}
 
-
-Base = declarative_base()
+Base = declarative_base(cls=Base)
 class RHNObject(Base):
     __tablename__ = 'rhnobjects'
 
@@ -24,30 +25,34 @@ class RHNObject(Base):
     def __repr__(self):
         return "<RHNObject(id='%s', uri='%s')>" % (self.id, self.uri)
 
-class checksum(Base):
-    __tablename__ = 'checksums'
-
-    keyid = Column(Integer, autoincrement=False)
-    active = Column(Boolean)
-    typeid = Column(Integer)
-    checksum = Column(String)
-    userid = Column(Integer)
-    date = Column(DateTime, default=current_timestamp())
-    pkey = Column(Integer, primary_key=True, autoincrement=True)
-
-    def __repr__(self):
-        return "<checksum(keyid='%s', active='%s', typeid='%s', checksum='%s', userid='%s', date='%s', pkey='%s')>" % (self.keyid, self.active, self.typeid, self.checksum, self.userid, self.date, self.pkey)
-
-class checksumtype(Base):
+class ChecksumType(Base):
     __tablename__ = 'checksumtypes'
 
     typeid = Column(Integer, primary_key=True, autoincrement=True)
     cstype = Column(String)
+    size = Column(Integer)
 
     def __repr__(self):
-        return "<checksumtype(typeid='%s', cstype='%s')>" % (self.typeid, self.cstype)
+        return "<checksumtype(typeid='%s', cstype='%s', size='%s')>" % (self.typeid, self.cstype, self.size)
+class Checksum(Base):
+    __tablename__ = 'checksums'
 
-class user(Base):
+    keyid = Column(Integer, autoincrement=False)
+    active = Column(Boolean)
+    typeid = Column(Integer, nullable=False)
+    checksum = Column(String)
+    checksumsize = Column(Integer)
+    userid = Column(Integer)
+    date = Column(DateTime, default=current_timestamp())
+    pkey = Column(Integer, primary_key=True, autoincrement=True)
+
+
+
+    def __repr__(self):
+        return "<checksum(keyid='%s', active='%s', typeid='%s', checksum='%s', checksumsize'%s', userid='%s', date='%s', pkey='%s')>" % (self.keyid, self.active, self.typeid, self.checksum, self.checksumsize, self.userid, self.date, self.pkey)
+
+
+class User(Base):
     __tablename__ = 'users'
 
     userid = Column(Integer, primary_key=True, autoincrement=True)
@@ -82,20 +87,26 @@ def startServer():
         Column('id', Integer, primary_key=True),
         Column('uri', String(256))
     )
-    checksums = Table('checksums', metadata,
-        Column('keyid', Integer, autoincrement=False),
-        Column('active', Boolean),
-        Column('typeid', Integer),
-        Column('checksum', String),
-        Column('userid', Integer),
-        Column('date', DateTime, default=current_timestamp()),
-        Column('pkey', Integer, primary_key=True)
-    )
-
     checksumtypes = Table('checksumtypes', metadata,
         Column('typeid', Integer, primary_key=True, autoincrement=True),
         Column('cstype', String(16)),
+        Column('size', Integer),
+        UniqueConstraint('typeid', 'size')
     )
+    checksums = Table('checksums', metadata,
+        Column('keyid', Integer, autoincrement=False),
+        Column('active', Boolean),
+        Column('typeid', Integer, nullable=False),
+        Column('checksum', String),
+        Column('checksumsize', Integer),
+        Column('userid', Integer),
+        Column('date', DateTime, default=current_timestamp()),
+        Column('pkey', Integer, primary_key=True),
+        ForeignKeyConstraint(['typeid', 'checksumsize'], 
+                             ['checksumtypes.typeid', 'checksumtypes.size'],
+                             onupdate="CASCADE")
+    )
+
 
     users = Table('users', metadata,
         Column('userid', Integer, primary_key=True, autoincrement=True),
@@ -133,13 +144,23 @@ def getIDFromURI(uri):
 #    ...
 #}
 #
-#And upserts the checksums listed into the appropriate table with the id associated with the uri
-#
+#And "upserts" the checksums listed into the appropriate table with the id associated with the uri
+#(not a true upsert because it just marks the old one inactive)
 #GET lists every URI and its associated data
-@app.route("/api/uris", methods=['GET', 'POST'])
+@app.route("/api/uris", methods=['GET', 'PUT'])
 #@requires_authentication
 def uris():
-    if request.method == 'POST':
+    """
+Go through the list of requests
+Get the URI ID
+For each checktype
+    Is the checktype valid?
+    Is the checksum valid for the type? (implement after constraint)
+    If both these things
+        Record the user and date of operation with the new thing
+    """
+    if request.method == 'PUT':
+        message = ""
         newEntries = request.get_json()
         session = Session()
         for entry in newEntries:
@@ -149,38 +170,45 @@ def uris():
 
             for checktype in entry:
                 checkvalue = entry[checktype]
-                tableObjectType = globals()[str(checktype)]
-#Todo: Get the user from the kerberos info
-                newHashInfo = tableObjectType(keyid = objectId, checksum = checkvalue, user = "", date = current_timestamp())
-                if session.query(tableObjectType).filter_by(keyid = objectId) == None:
-                    session.add(newHashInfo)
+#Checktype is the type, checkvalue is the checksum proper
+                typeid = session.query(ChecksumType).filter_by(cstype = checktype).first()
+                if(typeid == None):
+                    message = message + "Pseudoupsert failed on URI ID "+str(objectId)+" with type "+checktype+" and value "+checkvalue+": Invalid Checksum Type\n"
                 else:
-                    session.merge(newHashInfo)
+#Todo: Get the user from the kerberos info
+                    user = 1
+                    newHashInfo = Checksum(keyid = objectId, active=True, typeid=typeid, checksum = checkvalue, checksumsize = len(checkvalue), userid = user)
+                    session.query(Checksum).filter_by(keyid = objectId, typeid = typeid, active = True).update({"active": False}, synchronize_session='evaluate')
+                    session.add(newHashInfo)
+                    message = message + "Successfully submitted!\n"
         session.commit()
         session.close()
-        return "Successfully submitted!"
+        return message
     elif request.method == 'GET':
         session = Session()
         rhn = session.query(RHNObject).all()
-        md5raw = session.query(MD5).all()
-        sha256raw = session.query(SHA256).all()
+        checksumlist = session.query(Checksum).filter_by(active = True).all()
         session.close()
 
         rhnlist = {}       
 
         for rhnobject in rhn:
             keyid = rhnobject.id
-            md5s = dict((x.keyid, x) for x in md5raw)
-            md5 = md5s[keyid].__dict__
-            del md5['_sa_instance_state']
+            
+#            md5s = dict((x.keyid, x) for x in md5raw)
+#            md5 = md5s[keyid].__dict__
+ #           del md5['_sa_instance_state']
 
-            sha256s = dict((x.keyid, x) for x in sha256raw)
-            sha256 = sha256s[keyid].__dict__
-            del sha256['_sa_instance_state']
-           
-            rhnlist[rhnobject.uri] = {"md5": md5,
-                                  "sha256": sha256
-                                 }
+#            sha256s = dict((x.keyid, x) for x in sha256raw)
+#            sha256 = sha256s[keyid].__dict__
+#            del sha256['_sa_instance_state']
+            hashes = []
+            for checksum in checksumlist:
+                if checksum.keyid == keyid:
+                    cs = checksum.__dict__
+                    del cs['_sa_instance_state']
+                    hashes.append(cs)
+            rhnlist[rhnobject.uri] = hashes
         return jsonify(rhnlist)
 
 @app.route("/api/uris/<keyid>", methods=['GET'])

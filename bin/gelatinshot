@@ -24,28 +24,38 @@ class RHNObject(Base):
     def __repr__(self):
         return "<RHNObject(id='%s', uri='%s')>" % (self.id, self.uri)
 
-class MD5(Base):
-    __tablename__ = 'md5s'
+class checksum(Base):
+    __tablename__ = 'checksums'
 
-    keyid = Column(Integer, primary_key=True, autoincrement=False)
+    keyid = Column(Integer, autoincrement=False)
+    active = Column(Boolean)
+    typeid = Column(Integer)
     checksum = Column(String)
-    user = Column(String)
+    userid = Column(Integer)
     date = Column(DateTime, default=current_timestamp())
+    pkey = Column(Integer, primary_key=True, autoincrement=True)
 
     def __repr__(self):
-        return "<MD5(keyid='%s', checksum='%s', user='%s', date='%s')>" % (self.keyid, self.checksum, self.user, self.date)
+        return "<checksum(keyid='%s', active='%s', typeid='%s', checksum='%s', userid='%s', date='%s', pkey='%s')>" % (self.keyid, self.active, self.typeid, self.checksum, self.userid, self.date, self.pkey)
 
-class SHA256(Base):
-    __tablename__ = 'sha256s'
+class checksumtype(Base):
+    __tablename__ = 'checksumtypes'
 
-    keyid = Column(Integer, primary_key=True, autoincrement=False)
-    checksum = Column(String)
-    user = Column(String)
-    date = Column(DateTime, default=current_timestamp())
+    typeid = Column(Integer, primary_key=True, autoincrement=True)
+    cstype = Column(String)
 
     def __repr__(self):
-        return "<SHA256(keyid='%s', checksum='%s', user='%s', date='%s')>" % (self.keyid, self.checksum, self.user, self.date)
+        return "<checksumtype(typeid='%s', cstype='%s')>" % (self.typeid, self.cstype)
 
+class user(Base):
+    __tablename__ = 'users'
+
+    userid = Column(Integer, primary_key=True, autoincrement=True)
+    admin = Column(Boolean, default=False)
+    email = Column(String)
+
+    def __repr__(self):
+        return "<user(userid='%s', admin='%s', email='%s')>" % (self.userid, self.admin, self.email)
 
 
 
@@ -72,18 +82,25 @@ def startServer():
         Column('id', Integer, primary_key=True),
         Column('uri', String(256))
     )
-    md5 = Table('md5s', metadata,
-        Column('keyid', Integer, primary_key=True, autoincrement=False),
-        Column('checksum', String(32)),
-        Column('user', String(256)),
-        Column('date', DateTime, default=current_timestamp())
+    checksums = Table('checksums', metadata,
+        Column('keyid', Integer, autoincrement=False),
+        Column('active', Boolean),
+        Column('typeid', Integer),
+        Column('checksum', String),
+        Column('userid', Integer),
+        Column('date', DateTime, default=current_timestamp()),
+        Column('pkey', Integer, primary_key=True)
     )
 
-    sha256 = Table('sha256s', metadata,
-        Column('keyid', Integer, primary_key=True, autoincrement=False),
-        Column('checksum', String(64)),
-        Column('user', String(256)),
-        Column('date', DateTime, default=current_timestamp())
+    checksumtypes = Table('checksumtypes', metadata,
+        Column('typeid', Integer, primary_key=True, autoincrement=True),
+        Column('cstype', String(16)),
+    )
+
+    users = Table('users', metadata,
+        Column('userid', Integer, primary_key=True, autoincrement=True),
+        Column('admin', Boolean),
+        Column('email', String)
     )
     metadata.create_all(engine)
 #Queries the database for the ID of a URI
@@ -141,7 +158,7 @@ def uris():
                     session.merge(newHashInfo)
         session.commit()
         session.close()
-        return
+        return "Successfully submitted!"
     elif request.method == 'GET':
         session = Session()
         rhn = session.query(RHNObject).all()

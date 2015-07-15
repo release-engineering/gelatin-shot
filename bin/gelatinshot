@@ -89,7 +89,7 @@ def startServer():
     )
     checksumtypes = Table('checksumtypes', metadata,
         Column('typeid', Integer, primary_key=True, autoincrement=True),
-        Column('cstype', String(16)),
+        Column('cstype', String(16), unique=True),
         Column('size', Integer),
         UniqueConstraint('typeid', 'size')
     )
@@ -150,19 +150,12 @@ def getIDFromURI(uri):
 @app.route("/api/uris", methods=['GET', 'PUT'])
 #@requires_authentication
 def uris():
-    """
-Go through the list of requests
-Get the URI ID
-For each checktype
-    Is the checktype valid?
-    Is the checksum valid for the type? (implement after constraint)
-    If both these things
-        Record the user and date of operation with the new thing
-    """
     if request.method == 'PUT':
         message = ""
         newEntries = request.get_json()
         session = Session()
+#TODO: Get the user from the kerberos info
+        user = 1
         for entry in newEntries:
             objectId = getIDFromURI(entry)
 
@@ -170,18 +163,18 @@ For each checktype
 
             for checktype in entry:
                 checkvalue = entry[checktype]
-#Checktype is the type, checkvalue is the checksum proper
-                typeid = session.query(ChecksumType).filter_by(cstype = checktype).first()
-                if(typeid == None):
-                    message = message + "Pseudoupsert failed on URI ID "+str(objectId)+" with type "+checktype+" and value "+checkvalue+": Invalid Checksum Type\n"
-                else:
-#Todo: Get the user from the kerberos info
-                    user = 1
-                    newHashInfo = Checksum(keyid = objectId, active=True, typeid=typeid, checksum = checkvalue, checksumsize = len(checkvalue), userid = user)
-                    session.query(Checksum).filter_by(keyid = objectId, typeid = typeid, active = True).update({"active": False}, synchronize_session='evaluate')
-                    session.add(newHashInfo)
+                typeid = session.query(ChecksumType).filter_by(cstype = checktype).first().typeid
+                toUpdate = session.query(Checksum).filter_by(keyid = objectId, typeid = typeid, active = True)
+                if toUpdate != None:
+                    toUpdate.update({Checksum.active: False}, synchronize_session='evaluate')
+                newHashInfo = Checksum(keyid = objectId, active=True, typeid=typeid, checksum = checkvalue, checksumsize = len(checkvalue), userid = user)
+                session.add(newHashInfo)
+                try:
+                    session.commit()
                     message = message + "Successfully submitted!\n"
-        session.commit()
+                except Exception as e:
+                    session.rollback()
+                    message = message + str(e)
         session.close()
         return message
     elif request.method == 'GET':
@@ -194,14 +187,6 @@ For each checktype
 
         for rhnobject in rhn:
             keyid = rhnobject.id
-            
-#            md5s = dict((x.keyid, x) for x in md5raw)
-#            md5 = md5s[keyid].__dict__
- #           del md5['_sa_instance_state']
-
-#            sha256s = dict((x.keyid, x) for x in sha256raw)
-#            sha256 = sha256s[keyid].__dict__
-#            del sha256['_sa_instance_state']
             hashes = []
             for checksum in checksumlist:
                 if checksum.keyid == keyid:
@@ -211,26 +196,38 @@ For each checktype
             rhnlist[rhnobject.uri] = hashes
         return jsonify(rhnlist)
 
-@app.route("/api/uris/<keyid>", methods=['GET'])
-#@requires_authentication
-def retrieveURIInfo(keyid):
+#POST takes json of the form
+#{
+#    "hashtype": 3,
+#    "hashtype2": 4
+#}
+#GET lists all checksum types and respective data
+#TODO: limit POST request to administrators
+@app.route("/api/checksumtypes", methods=['GET', 'POST'])
+def checksumtypes():
+    if request.method == 'POST':
+        newEntries = request.get_json()
+        session = Session()
+        for checktype in newEntries:
+            newChecksumtypeInfo = ChecksumType(cstype=checktype, size=newEntries[checktype])
+            session.add(newChecksumtypeInfo)
+            try:
+                session.commit()
+            except:
+                pass
+        session.close()
+        return "Nailed it"
+
     if request.method == 'GET':
         session = Session()
-        rhn = session.query(RHNObject).filter_by(id = keyid).first()
-        md5 = session.query(MD5).filter_by(keyid = keyid).first().__dict__
-        sha256 = session.query(SHA256).filter_by(keyid = keyid).first().__dict__
+        checksumtypes = session.query(ChecksumType).all()
         session.close()
-
-        rhnlist = {}       
-
-        del md5['_sa_instance_state']
-        del sha256['_sa_instance_state']
-
-        rhnlist[rhn.uri] = {"md5": md5,
-                              "sha256": sha256
-                             }
-        return jsonify(rhnlist)
-
+        cstlist = {}
+        for checksumtype in checksumtypes:
+           checksumdict = checksumtype.__dict__
+           del checksumdict['_sa_instance_state']
+           cstlist[checksumtype.cstype] = checksumdict
+        return jsonify(cstlist)
 
 #@app.route("/api/checksums/<checksumtype>/convert", methods=['GET'])
 #@requires_authentication

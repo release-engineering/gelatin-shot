@@ -34,6 +34,7 @@ class ChecksumType(Base):
 
     def __repr__(self):
         return "<checksumtype(typeid='%s', cstype='%s', size='%s')>" % (self.typeid, self.cstype, self.size)
+
 class Checksum(Base):
     __tablename__ = 'checksums'
 
@@ -104,7 +105,7 @@ def startServer():
         Column('pkey', Integer, primary_key=True),
         ForeignKeyConstraint(['typeid', 'checksumsize'], 
                              ['checksumtypes.typeid', 'checksumtypes.size'],
-                             onupdate="CASCADE")
+                             onupdate="CASCADE", ondelete="CASCADE")
     )
 
 
@@ -203,7 +204,7 @@ def uris():
 #}
 #GET lists all checksum types and respective data
 #TODO: limit POST request to administrators
-@app.route("/api/checksumtypes", methods=['GET', 'POST'])
+@app.route("/api/checksumtypes", methods=['GET', 'POST', 'DELETE'])
 def checksumtypes():
     if request.method == 'POST':
         newEntries = request.get_json()
@@ -228,7 +229,11 @@ def checksumtypes():
            del checksumdict['_sa_instance_state']
            cstlist[checksumtype.cstype] = checksumdict
         return jsonify(cstlist)
-
+    if request.method == 'DELETE':
+        session = Session()
+        session.query(ChecksumType).delete(synchronize_session='evaluate')
+        session.commit()
+        session.close()
 #@app.route("/api/checksums/<checksumtype>/convert", methods=['GET'])
 #@requires_authentication
 #def convert(checksumtype):

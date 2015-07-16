@@ -207,33 +207,40 @@ def uris():
 @app.route("/api/checksumtypes", methods=['GET', 'POST', 'DELETE'])
 def checksumtypes():
     if request.method == 'POST':
+        message = ""
         newEntries = request.get_json()
         session = Session()
         for checktype in newEntries:
-            newChecksumtypeInfo = ChecksumType(cstype=checktype, size=newEntries[checktype])
+            newChecksumtypeInfo = ChecksumType(cstype=checktype.upper(), size=newEntries[checktype])
             session.add(newChecksumtypeInfo)
             try:
                 session.commit()
-            except:
-                pass
+            except Exception as e:
+                session.rollback()
+                message = message + str(e)
         session.close()
-        return "Nailed it"
+        return message
 
     if request.method == 'GET':
         session = Session()
-        checksumtypes = session.query(ChecksumType).all()
+        checksumtypes = session.query(ChecksumType, ChecksumType.typeid, ChecksumType.cstype, ChecksumType.size).all()
         session.close()
+ 
         cstlist = {}
         for checksumtype in checksumtypes:
-           checksumdict = checksumtype.__dict__
-           del checksumdict['_sa_instance_state']
-           cstlist[checksumtype.cstype] = checksumdict
+           cstlist[checksumtype.cstype] = {"typeid": checksumtype.typeid,
+                                           "size": checksumtype.size}
         return jsonify(cstlist)
     if request.method == 'DELETE':
+        result = ""
         session = Session()
-        session.query(ChecksumType).delete(synchronize_session='evaluate')
-        session.commit()
+        try:
+            session.query(ChecksumType).delete(synchronize_session='evaluate')
+            session.commit()
+        except Exception as e:
+            result = str(e)
         session.close()
+        return result
 #@app.route("/api/checksums/<checksumtype>/convert", methods=['GET'])
 #@requires_authentication
 #def convert(checksumtype):

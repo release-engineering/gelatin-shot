@@ -134,7 +134,9 @@ def getIDFromURI(uri):
     session.close()
     return objectId
 
-
+def removeSAInstanceState(adict):
+    del adict['_sa_instance_state']
+    return adict
 #POST takes JSON of the form
 #
 #{
@@ -164,7 +166,11 @@ def uris():
 
             for checktype in entry:
                 checkvalue = entry[checktype]
-                typeid = session.query(ChecksumType).filter_by(cstype = checktype).first().typeid
+                try:
+                    typeid = session.query(ChecksumType).filter_by(cstype = checktype.upper()).first().typeid
+                except:
+                    session.rollback()
+                    typeid = 0
                 toUpdate = session.query(Checksum).filter_by(keyid = objectId, typeid = typeid, active = True)
                 if toUpdate != None:
                     toUpdate.update({Checksum.active: False}, synchronize_session='evaluate')
@@ -172,7 +178,6 @@ def uris():
                 session.add(newHashInfo)
                 try:
                     session.commit()
-                    message = message + "Successfully submitted!\n"
                 except Exception as e:
                     session.rollback()
                     message = message + str(e)
@@ -188,13 +193,22 @@ def uris():
 
         for rhnobject in rhn:
             keyid = rhnobject.id
-            hashes = []
+            hashes = {}
             for checksum in checksumlist:
                 if checksum.keyid == keyid:
-                    cs = checksum.__dict__
-                    del cs['_sa_instance_state']
-                    hashes.append(cs)
-            rhnlist[rhnobject.uri] = hashes
+                    csd = checksum.__dict__
+                    del csd['_sa_instance_state']
+                    checksumtype = session.query(ChecksumType).filter_by(typeid = checksum.typeid).first().cstype
+                    hashes[checksumtype] = csd
+            
+            if hashes == {}:
+                session.query(RHNObject).filter_by(uri = rhnobject.uri).delete(synchronize_session='evaluate')
+                try:
+                    session.commit()
+                except:
+                    session.rollback()
+            else:
+                rhnlist[rhnobject.uri] = hashes
         return jsonify(rhnlist)
     elif request.method == 'DELETE':
         result = ""

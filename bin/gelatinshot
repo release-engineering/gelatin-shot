@@ -148,7 +148,7 @@ def getIDFromURI(uri):
 #And "upserts" the checksums listed into the appropriate table with the id associated with the uri
 #(not a true upsert because it just marks the old one inactive)
 #GET lists every URI and its associated data
-@app.route("/api/uris", methods=['GET', 'PUT'])
+@app.route("/api/uris", methods=['GET', 'PUT', 'DELETE'])
 #@requires_authentication
 def uris():
     if request.method == 'PUT':
@@ -196,7 +196,16 @@ def uris():
                     hashes.append(cs)
             rhnlist[rhnobject.uri] = hashes
         return jsonify(rhnlist)
-
+    elif request.method == 'DELETE':
+        result = ""
+        session = Session()
+        try:
+            session.query(RHNObject).delete(synchronize_session='evaluate')
+            session.commit()
+        except Exception as e:
+            result = str(e)
+        session.close()
+        return result
 #POST takes json of the form
 #{
 #    "hashtype": 3,

@@ -19,6 +19,11 @@ def puturis(payload):
 def deleteuris():
     response = requests.delete("http://localhost:5000/api/uris")
 
+def convertchecksums(payload, target):
+    response = requests.get("http://localhost:5000/api/checksums/convert/"+target, headers={'content-type':'application/json'}, data=json.dumps(payload))
+    return response.text
+
+
 class TestChecksumTypesEmpty(unittest.TestCase):
     #DELETE should always return empty
     def test_delete(self):
@@ -198,11 +203,11 @@ class TestUrisEmptyPostValid(unittest.TestCase):
             },
             "URI2": { # URI 2 should have MD5
                 "SHA512": "ASHA512CHECKSUM",
-                "MD5": "AN"
+                "MD5": "AM"
             },
             "URI3": { # URI 3 should have MD5
-                "SHA512": "ASHA512CHECKSUM",
-                "md5": "AN"
+                "SHA512": "ASHA512CHECKSUA",
+                "md5": "AO"
             }
         }
         puturis(payload)
@@ -230,15 +235,14 @@ class TestUrisEmptyPostValid(unittest.TestCase):
     def test_postURI2HasMD5(self):
         self.assertIsNotNone(self.results["URI2"]["MD5"])
     def test_postURI2MD5IsAN(self):
-        self.assertEqual(self.results["URI2"]["MD5"]["checksum"], "AN")
+        self.assertEqual(self.results["URI2"]["MD5"]["checksum"], "AM")
     
     def test_postHasURI3(self):
-        print self.results
         self.assertIsNotNone(self.results["URI3"])
     def test_postURI3HasMD5(self):
         self.assertIsNotNone(self.results["URI3"]["MD5"])
     def test_postURI3MD5IsAN(self):
-        self.assertEqual(self.results["URI3"]["MD5"]["checksum"], "AN")
+        self.assertEqual(self.results["URI3"]["MD5"]["checksum"], "AO")
 
 class TestUris(unittest.TestCase):
     def setUp(self):
@@ -258,11 +262,11 @@ class TestUris(unittest.TestCase):
             },
             "URI2": { # URI 2 should have MD5
                 "SHA512": "ASHA512CHECKSUM",
-                "MD5": "AN"
+                "MD5": "A2"
             },
             "URI3": { # URI 3 should have MD5
                 "SHA512": "ASHA512CHECKSUM",
-                "md5": "AN"
+                "md5": "A3"
             }
         }
         puturis(payload)
@@ -280,6 +284,45 @@ class TestUris(unittest.TestCase):
         self.assertIsNotNone(self.results["URI1"])
         self.assertIsNotNone(self.results["URI1"]["SHA256"])
 
+class TestConvert(unittest.TestCase):
+    def setUp(self):
+        payload = {
+            "sha256": 1,
+            "md5": 2,
+            "sha512": 3
+            }
+        postChecksumTypes(payload)
+        payload = {
+            "URI1": { #URI 1 should have SHA256 and MD5
+                "SHA256": "A",
+                "MD5": "AN",
+                "sha512": "ASH"
+            },
+            "URI2": { # URI 2 should have MD5
+                "SHA512": "ASQ",
+                "MD5": "AQ",
+                "sha256": "A"
+            }
+        }
+        puturis(payload)
+        print geturis()
+	payload = {
+	    "md5": [
+	        "AN"
+	    ],
+	    "sha512": [
+	        "ASQ"
+	    ]
+	}
+        self.result = convertchecksums(payload, "sha256")
+    def tearDown(self):
+        deleteuris()
+        deleteChecksumTypes()
+    
+    def test_convert(self):
+        print geturis()
+        print self.result
+#TODO: IMPLEMENT CHECKSUM UNIQUENESS
 if __name__ == '__main__':
     unittest.main()
 

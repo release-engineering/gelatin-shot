@@ -161,7 +161,6 @@ def uris():
         user = 1
         for entry in newEntries:
             objectId = getIDFromURI(entry)
-
             entry = newEntries[entry]
 
             for checktype in entry:
@@ -174,10 +173,12 @@ def uris():
                 toUpdate = session.query(Checksum).filter_by(keyid = objectId, typeid = typeid, active = True)
                 if toUpdate != None:
                     toUpdate.update({Checksum.active: False}, synchronize_session='evaluate')
+                    print "!!!!!\n\nUPDATED "+checkvalue+"\n!!!!!\n\n"
                 newHashInfo = Checksum(keyid = objectId, active=True, typeid=typeid, checksum = checkvalue, checksumsize = len(checkvalue), userid = user)
                 session.add(newHashInfo)
                 try:
                     session.commit()
+                    print "*****\n\nADDED NEW CHECKSUM "+checkvalue+"\n*****\n\n"
                 except Exception as e:
                     session.rollback()
                     message = message + str(e)
@@ -264,9 +265,42 @@ def checksumtypes():
             result = str(e)
         session.close()
         return result
-#@app.route("/api/checksums/<checksumtype>/convert", methods=['GET'])
+#Converts the given json list of checksums to the checksum type in the URL
+#GET takes json of the form
+#{
+#    "md5": [
+#        "thing",
+#        "thing2",
+#        "thing3"
+#    ],
+#    "sha256": [
+#        "thing4",
+#        "thing5",
+#        "thing6"
+#    ]
+#}
+@app.route("/api/checksums/convert/<checksumtype>", methods=['GET'])
 #@requires_authentication
-#def convert(checksumtype):
+def convert(checksumtype):
+    if request.method == 'GET':
+        convertData = request.get_json()
+        converted = {}
+        session = Session()
+        targetTypeId = session.query(ChecksumType, ChecksumType.typeid).filter_by(cstype = checksumtype.upper()).first().typeid
+        for starttype in convertData:
+            startchecksums = convertData[starttype]
+            startTypeId = session.query(ChecksumType, ChecksumType.typeid).filter_by(cstype = starttype.upper()).first().typeid
+            newchecksums = []
+            for checksum in startchecksums:
+                try:
+                    keyid = session.query(Checksum, Checksum.keyid).filter_by(checksum = checksum).first().keyid
+                    newchecksum = session.query(Checksum, Checksum.checksum).filter_by(keyid = keyid, typeid = targetTypeId).first().checksum
+                    newchecksums.append(newchecksum)
+                except:
+                  pass
+            converted[starttype] = newchecksums
+        session.close()
+        return jsonify(converted)
 
 if __name__ == "__main__":
     startServer()

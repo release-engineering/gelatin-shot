@@ -170,12 +170,10 @@ def uris():
                 toUpdate = session.query(Checksum).filter_by(keyid = objectId, typeid = typeid, active = True)
                 if toUpdate != None:
                     toUpdate.update({Checksum.active: False}, synchronize_session='evaluate')
-                    print "!!!!!\n\nUPDATED "+checkvalue+"\n!!!!!\n\n"
                 newHashInfo = Checksum(keyid = objectId, active=True, typeid=typeid, checksum = checkvalue, checksumsize = len(checkvalue), userid = user)
                 session.add(newHashInfo)
                 try:
                     session.commit()
-                    print "*****\n\nADDED NEW CHECKSUM "+checkvalue+"\n*****\n\n"
                 except Exception as e:
                     session.rollback()
                     message = message + str(e)

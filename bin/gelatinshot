@@ -134,9 +134,6 @@ def getIDFromURI(uri):
     session.close()
     return objectId
 
-def removeSAInstanceState(adict):
-    del adict['_sa_instance_state']
-    return adict
 #POST takes JSON of the form
 #
 #{

@@ -1,4 +1,7 @@
 build/
 dist/
-gelatin_shot.egg-info/
+*egg*
 conf/gelatin.conf
+bin/__init__.pyc
+bin/gelatinshot.pyc
+http*

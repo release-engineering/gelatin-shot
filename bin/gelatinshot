@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import os
 from flask import Flask, url_for, request, jsonify
-#from flask_kerberos import requires_authentication, init_kerberos
+from flask_kerberos import requires_authentication, init_kerberos
 from sqlalchemy import create_engine, update
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, String, Integer, DateTime, Sequence, Boolean, UniqueConstraint
@@ -224,6 +224,7 @@ def uris():
 #GET lists all checksum types and respective data
 #TODO: limit POST request to administrators
 @app.route("/api/checksumtypes", methods=['GET', 'POST', 'DELETE'])
+#@requires_authentication
 def checksumtypes():
     if request.method == 'POST':
         message = ""
@@ -296,7 +297,15 @@ def convert(checksumtype):
             converted[starttype] = newchecksums
         session.close()
         return jsonify(converted)
-
+@app.route("/api/checksums/<uri>", methods=['GET'])
+#@requires_authentication
+def getChecksumsFromUri(uri):
+    if request.method == 'GET':
+        uriId = getIDFromURI(uri)
+        session = Session()
+        checksums = session.query(Checksum, Checksum.checksum).filter_by(active = True, keyid = uriId).all()
+        session.close()
+        return jsonify(checksums)
 if __name__ == "__main__":
     startServer()
     app.run(debug = True)
